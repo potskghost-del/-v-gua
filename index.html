@@ -1,1 +1,665 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>EvoWars Emoji Edition v2</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+        body, html {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            background-color: #0b0c10;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        /* Bản đồ con góc trái */
+        #minimap {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            width: 130px;
+            height: 130px;
+            background: rgba(10, 10, 25, 0.75);
+            border: 2px solid #1f2833;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        #minimapCanvas {
+            width: 100%;
+            height: 100%;
+        }
+        /* Bảng xếp hạng */
+        #leaderboard {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(10, 10, 25, 0.8);
+            color: #c5a059;
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            min-width: 180px;
+            border: 1px solid #45f3ff;
+            box-shadow: 0 0 15px rgba(69, 243, 255, 0.1);
+        }
+        #leaderboard h3 { 
+            margin: 0 0 8px 0; 
+            font-size: 14px; 
+            text-align: center; 
+            color: #45f3ff;
+            letter-spacing: 1px;
+        }
+        #leaderboard ol { margin: 0; padding-left: 18px; }
+        #leaderboard li { margin-bottom: 4px; color: #fff; font-weight: 500;}
+        
+        /* Giao diện cấp độ phía dưới */
+        #ui-bar {
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            text-align: center;
+            pointer-events: none;
+            z-index: 5;
+        }
+        #playerStats {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            color: #45f3ff;
+        }
+        #levelBar {
+            width: 280px;
+            height: 14px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 7px;
+            overflow: hidden;
+            border: 1.5px solid #fff;
+            box-shadow: 0 0 8px rgba(0,0,0,0.5);
+        }
+        #levelProgress {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #00ffcc, #45f3ff);
+            transition: width 0.1s ease;
+        }
 
+        /* Nút điều khiển Mobile / Touch */
+        .control-btn {
+            position: absolute;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            z-index: 10;
+            touch-action: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        /* Joystick đa hướng di chuyển */
+        #joystick-zone {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            width: 130px;
+            height: 130px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            touch-action: none;
+        }
+        #joystick-stick {
+            width: 55px;
+            height: 55px;
+            background: rgba(255, 255, 255, 0.55);
+            position: absolute;
+            top: 37.5px;
+            left: 37.5px;
+            border-radius: 50%;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.3);
+        }
+        /* Nút Tốc độ & Đánh */
+        #btn-attack {
+            bottom: 50px;
+            right: 40px;
+            width: 75px;
+            height: 75px;
+            font-size: 32px;
+            background: rgba(255, 46, 99, 0.6);
+            border: 2px solid rgba(255, 46, 99, 0.9);
+        }
+        #btn-boost {
+            bottom: 60px;
+            right: 135px;
+            width: 60px;
+            height: 60px;
+            font-size: 24px;
+            background: rgba(255, 211, 105, 0.6);
+            border: 2px solid rgba(255, 211, 105, 0.9);
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="minimap"><canvas id="minimapCanvas"></canvas></div>
+    
+    <div id="leaderboard">
+        <h3>TOP CAO THỦ</h3>
+        <ol id="leaderList"></ol>
+    </div>
+
+    <div id="ui-bar">
+        <div id="playerStats">Cấp độ: 1 | Danh hiệu: Đang tải...</div>
+        <div id="levelBar"><div id="levelProgress"></div></div>
+    </div>
+
+    <!-- Hệ thống điều khiển độc lập -->
+    <div id="joystick-zone"><div id="joystick-stick"></div></div>
+    <div id="btn-boost" class="control-btn">⚡</div>
+    <div id="btn-attack" class="control-btn">⚔️</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const minimapCanvas = document.getElementById('minimapCanvas');
+const mCtx = minimapCanvas.getContext('2d');
+
+// Cấu hình Thế giới game
+const MAP_SIZE = 3500; 
+const BOT_COUNT = 40; 
+const FOOD_COUNT = 500;
+
+// Hệ thống tiến hóa của Nhân vật
+const EVOLUTIONS = [
+    { level: 1, name: "Sơ Sinh", emoji: "😀", weapon: "🏏", size: 24, range: 45 },
+    { level: 2, name: "Tập Sự", emoji: "😃", weapon: "🏑", size: 28, range: 55 },
+    { level: 3, name: "Thợ Săn", emoji: "😄", weapon: "🏒", size: 32, range: 65 },
+    { level: 4, name: "Chiến Binh", emoji: "😁", weapon: "🪓", size: 36, range: 78 },
+    { level: 5, name: "Đồ Tể", emoji: "😆", weapon: "⚔️", size: 40, range: 92 },
+    { level: 6, name: "Sát Thủ", emoji: "😂", weapon: "🗡️", size: 44, range: 106 },
+    { level: 7, name: "Huyền Thoại", emoji: "🤣", weapon: "🔱", size: 48, range: 122 },
+    { level: 8, name: "Thần Thánh", emoji: "👑", weapon: "⚡", size: 54, range: 140 }
+];
+
+const BOT_NAMES = ["Ronaldo", "Messi", "Slayer", "Shadow", "Alpha", "Gladiator", "Zeus", "Phoenix", "Goku", "Naruto", "Luffy", "Saitama", "Pro_No1", "Batman", "Asura", "Knight", "Hunter", "Viper", "Challenger", "Kaelthas"];
+
+let player;
+let entities = [];
+let foods = [];
+
+// Quản lý trạng thái bấm phím (Hỗ trợ chống Unikey tối đa)
+let inputAxes = { x: 0, y: 0 }; 
+let isBoosting = false;
+
+// Trạng thái Joystick di động
+let joystick = { active: false, startX: 0, startY: 0, angle: 0, force: 0 };
+const stick = document.getElementById('joystick-stick');
+const zone = document.getElementById('joystick-zone');
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    minimapCanvas.width = 130;
+    minimapCanvas.height = 130;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function expNeeded(lvl) { return lvl * 100; }
+
+// Lớp đối tượng Nhân vật (Người chơi & Bot)
+class Character {
+    constructor(x, y, isBot = false, name = "Bot") {
+        this.x = x;
+        this.y = y;
+        this.isBot = isBot;
+        this.name = name;
+        this.score = 0;
+        this.level = 1;
+        this.exp = 0;
+        this.angle = Math.random() * Math.PI * 2;
+        this.baseSpeed = 3.5;
+        this.isBoosting = false;
+        
+        // Trạng thái chém kiếm
+        this.isAttacking = false;
+        this.attackProgress = 0; 
+        
+        this.updateEvo();
+    }
+
+    updateEvo() {
+        let evo = EVOLUTIONS[Math.min(this.level - 1, EVOLUTIONS.length - 1)];
+        this.emoji = evo.emoji;
+        this.weapon = evo.weapon;
+        this.size = evo.size;
+        this.range = evo.range;
+    }
+
+    addExp(amount) {
+        this.exp += amount;
+        let needed = expNeeded(this.level);
+        while (this.exp >= needed && this.level < EVOLUTIONS.length) {
+            this.exp -= needed;
+            this.level++;
+            this.updateEvo();
+            needed = expNeeded(this.level);
+        }
+    }
+
+    attack() {
+        if (!this.isAttacking) {
+            this.isAttacking = true;
+            this.attackProgress = 0;
+        }
+    }
+
+    update() {
+        // Tốc độ thực tế phụ thuộc trạng thái tăng tốc
+        let speed = this.baseSpeed;
+        if (this.isBoosting && this.exp > 5) {
+            speed *= 1.7;
+            if (Math.random() < 0.15) this.exp -= 1; // Giảm nhẹ exp khi dùng tốc độ
+        }
+
+        if (!this.isBot) {
+            // XỬ LÝ DI CHUYỂN ĐA HƯỚNG CHO NGƯỜI CHƠI
+            if (joystick.active && joystick.force > 0) {
+                // Di chuyển bằng Joystick cảm ứng / Chuột kéo
+                this.angle = joystick.angle;
+                this.x += Math.cos(this.angle) * speed * Math.min(joystick.force, 1);
+                this.y += Math.sin(this.angle) * speed * Math.min(joystick.force, 1);
+            } else if (inputAxes.x !== 0 || inputAxes.y !== 0) {
+                // Di chuyển bằng tổ hợp phím (Tính toán góc xiên chính xác)
+                this.angle = Math.atan2(inputAxes.y, inputAxes.x);
+                this.x += Math.cos(this.angle) * speed;
+                this.y += Math.sin(this.angle) * speed;
+            }
+        } else {
+            // AI CỦA BOT PHÁT TRIỂN
+            if (Math.random() < 0.025) {
+                let target = this.getNearestObjective();
+                if (target) {
+                    // Hướng về phía mục tiêu (Thức ăn hoặc đối thủ)
+                    let targetAngle = Math.atan2(target.y - this.y, target.x - this.x);
+                    this.angle = targetAngle + (Math.random() * 0.4 - 0.2); // Hơi lệch nhẹ cho tự nhiên
+                    
+                    // Nếu gặp đối thủ ở gần thì tự động vung kiếm chém
+                    if (target.emoji && Math.hypot(target.x - this.x, target.y - this.y) < this.range * 1.5) {
+                        this.attack();
+                    }
+                } else {
+                    this.angle += (Math.random() * 2 - 1);
+                }
+            }
+            
+            // Ép bot quay đầu lại nếu chạy sát rìa map biên giới
+            if (this.x < 100) this.angle = 0;
+            if (this.x > MAP_SIZE - 100) this.angle = Math.PI;
+            if (this.y < 100) this.angle = Math.PI / 2;
+            if (this.y > MAP_SIZE - 100) this.angle = -Math.PI / 2;
+
+            this.x += Math.cos(this.angle) * speed * 0.85;
+            this.y += Math.sin(this.angle) * speed * 0.85;
+            
+            // Bot ngẫu nhiên tăng tốc nếu có cấp cao
+            this.isBoosting = (this.isAttacking || (Math.random() < 0.05 && this.level > 2));
+        }
+
+        // Khóa nhân vật trong biên giới bản đồ rộng
+        this.x = Math.max(this.size, Math.min(MAP_SIZE - this.size, this.x));
+        this.y = Math.max(this.size, Math.min(MAP_SIZE - this.size, this.y));
+
+        // Hoạt ảnh chém vũ khí vòng tròn
+        if (this.isAttacking) {
+            this.attackProgress += 0.16; // Tốc độ vung kiếm quét qua mục tiêu
+            if (this.attackProgress >= 1) {
+                this.isAttacking = false;
+                this.attackProgress = 0;
+            }
+        }
+    }
+
+    getNearestObjective() {
+        let nearest = null;
+        let minDist = 250;
+        
+        // Check kẻ địch xung quanh
+        let rivals = [player, ...entities];
+        rivals.forEach(r => {
+            if (r !== this) {
+                let d = Math.hypot(r.x - this.x, r.y - this.y);
+                if (d < minDist) { minDist = d; nearest = r; }
+            }
+        });
+        // Check hạt thức ăn xung quanh nếu không thấy địch
+        if (!nearest) {
+            foods.forEach(f => {
+                let d = Math.hypot(f.x - this.x, f.y - this.y);
+                if (d < minDist) { minDist = d; nearest = f; }
+            });
+        }
+        return nearest;
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        
+        // Vẽ hiệu ứng vòng chém khi vung vũ khí
+        if (this.isAttacking) {
+            ctx.beginPath();
+            ctx.arc(0, 0, this.range, this.angle - Math.PI/2, this.angle + Math.PI/2);
+            ctx.strokeStyle = 'rgba(69, 243, 255, 0.15)';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+        }
+
+        // Vẽ Vũ Khí xoay theo hướng mặt hoặc hướng chém quẹt
+        ctx.save();
+        let currentWeaponAngle = this.angle + Math.PI / 4; 
+        if (this.isAttacking) {
+            currentWeaponAngle = this.angle - Math.PI / 2 + (Math.PI * this.attackProgress);
+        }
+        ctx.rotate(currentWeaponAngle);
+        ctx.font = `${this.size * 1.1}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.weapon, this.range * 0.65, -this.range * 0.15);
+        ctx.restore();
+
+        // Vẽ Thân hình (Emoji đại diện)
+        ctx.font = `${this.size}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.emoji, 0, 0);
+
+        // Vẽ tên và chỉ số cấp độ trên đầu
+        ctx.restore();
+        ctx.save();
+        ctx.fillStyle = this.isBot ? '#ff4d6d' : '#00ffcc';
+        ctx.font = 'bold 13px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${this.name} [Lv.${this.level}]`, this.x, this.y - this.size - 6);
+        ctx.restore();
+    }
+
+    // Tọa độ mũi kiếm thực tế ngoài không gian để tính va chạm sát thương
+    getWeaponPos() {
+        let wpAngle = this.angle + Math.PI / 4;
+        if (this.isAttacking) {
+            wpAngle = this.angle - Math.PI / 2 + (Math.PI * this.attackProgress);
+        }
+        return {
+            x: this.x + Math.cos(wpAngle) * this.range * 0.85,
+            y: this.y + Math.sin(wpAngle) * this.range * 0.85
+        };
+    }
+}
+
+// Khởi tạo thế giới trò chơi ban đầu
+function init() {
+    player = new Character(MAP_SIZE / 2, MAP_SIZE / 2, false, "Bạn");
+    
+    foods = [];
+    for (let i = 0; i < FOOD_COUNT; i++) spawnFood();
+
+    entities = [];
+    for (let i = 0; i < BOT_COUNT; i++) spawnBot();
+}
+
+function spawnFood() {
+    foods.push({
+        x: Math.random() * (MAP_SIZE - 40) + 20,
+        y: Math.random() * (MAP_SIZE - 40) + 20,
+        color: `hsl(${Math.random() * 360}, 95%, 65%)`,
+        size: Math.random() * 3 + 4
+    });
+}
+
+function spawnBot() {
+    let name = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)] + "_" + Math.floor(Math.random()*90 + 10);
+    let bot = new Character(Math.random() * (MAP_SIZE - 200) + 100, Math.random() * (MAP_SIZE - 200) + 100, true, name);
+    bot.addExp(Math.random() * 180); // Cấp độ ngẫu nhiên ban đầu cho bot sinh động
+    entities.push(bot);
+}
+
+// Xử lý quét va chạm liên tục từng khung hình
+function checkCollisions() {
+    let activeFighters = [player, ...entities];
+
+    // 1. Kiểm tra ăn hạt ngọc kinh nghiệm
+    activeFighters.forEach(p => {
+        for (let i = foods.length - 1; i >= 0; i--) {
+            let f = foods[i];
+            if (Math.hypot(p.x - f.x, p.y - f.y) < p.size + f.size) {
+                foods.splice(i, 1);
+                p.addExp(20);
+                p.score += 20;
+                spawnFood();
+            }
+        }
+    });
+
+    // 2. Kiểm tra vũ khí chém vào thân xác đối thủ
+    for (let i = 0; i < activeFighters.length; i++) {
+        let attacker = activeFighters[i];
+        if (!attacker.isAttacking) continue;
+
+        let wPos = attacker.getWeaponPos();
+
+        for (let j = 0; j < activeFighters.length; j++) {
+            if (i === j) continue;
+            let victim = activeFighters[j];
+
+            let dist = Math.hypot(wPos.x - victim.x, wPos.y - victim.y);
+            // Sát thương trúng đích
+            if (dist < victim.size + 12) {
+                attacker.addExp(expNeeded(victim.level) * 0.5 + victim.exp);
+                attacker.score += victim.level * 250;
+
+                if (victim === player) {
+                    alert(`Trận đấu kết thúc! Sát thủ [ ${attacker.name} ] đã tiễn bạn lên bảng số!`);
+                    init();
+                    return;
+                } else {
+                    let idx = entities.indexOf(victim);
+                    if (idx > -1) entities.splice(idx, 1);
+                    spawnBot();
+                }
+            }
+        }
+    }
+}
+
+// Đồng bộ giao diện bảng điểm và thanh năng lượng
+function updateUI() {
+    let list = [player, ...entities].sort((a, b) => b.score - a.score);
+    let html = "";
+    for (let i = 0; i < Math.min(5, list.length); i++) {
+        let item = list[i];
+        let clr = item === player ? '#45f3ff' : '#ffffff';
+        html += `<li style="color:${clr}">${item.name}: ${Math.floor(item.score)}</li>`;
+    }
+    document.getElementById('leaderList').innerHTML = html;
+
+    let currentEvo = EVOLUTIONS[Math.min(player.level - 1, EVOLUTIONS.length - 1)];
+    document.getElementById('playerStats').innerText = `Cấp độ: ${player.level} | Danh hiệu: ${currentEvo.name}`;
+    let prog = (player.exp / expNeeded(player.level)) * 100;
+    document.getElementById('levelProgress').style.width = `${Math.min(prog, 100)}%`;
+}
+
+// Vẽ Bản đồ rada mini
+function drawMinimap() {
+    mCtx.clearRect(0, 0, 130, 130);
+    let ratio = 130 / MAP_SIZE;
+
+    // Chấm Bạn (Xanh ngọc)
+    mCtx.fillStyle = '#00ffcc';
+    mCtx.beginPath(); mCtx.arc(player.x * ratio, player.y * ratio, 3.5, 0, Math.PI*2); mCtx.fill();
+
+    // Chấm Bot (Đỏ)
+    mCtx.fillStyle = '#ff4d6d';
+    entities.forEach(b => {
+        mCtx.beginPath(); mCtx.arc(b.x * ratio, b.y * ratio, 2, 0, Math.PI*2); mCtx.fill();
+    });
+}
+
+// Luồng lặp cốt lõi của Game
+function loop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Dịch chuyển Camera lấy Player làm trung tâm tiêu điểm
+    ctx.save();
+    ctx.translate(canvas.width / 2 - player.x, canvas.height / 2 - player.y);
+
+    // Vẽ nền lưới không gian vô hạn (Grid)
+    ctx.strokeStyle = '#151922';
+    ctx.lineWidth = 1.5;
+    for (let x = 0; x < MAP_SIZE; x += 150) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, MAP_SIZE); ctx.stroke();
+    }
+    for (let y = 0; y < MAP_SIZE; y += 150) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_SIZE, y); ctx.stroke();
+    }
+
+    // Vẽ thành trì biên giới bản đồ rộng
+    ctx.strokeStyle = '#ff2a5f';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(0, 0, MAP_SIZE, MAP_SIZE);
+
+    // Vẽ Thức ăn
+    foods.forEach(f => {
+        ctx.beginPath(); ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+        ctx.fillStyle = f.color; ctx.fill();
+    });
+
+    // Luân chuyển Bot hoạt động
+    entities.forEach(bot => {
+        bot.update();
+        bot.draw();
+    });
+
+    // Luân chuyển Người chơi hoạt động
+    player.isBoosting = isBoosting;
+    player.update();
+    player.draw();
+
+    ctx.restore();
+
+    checkCollisions();
+    drawMinimap();
+    updateUI();
+
+    requestAnimationFrame(loop);
+}
+
+// ====== HỆ THỐNG PHÍM VÀ CHUỘT MÁY TÍNH - KHẮC PHỤC HOÀN TOÀN LỖI ĐA HƯỚNG ======
+const keyState = {};
+
+function updateInputAxes() {
+    inputAxes.x = 0;
+    inputAxes.y = 0;
+
+    if (keyState['w'] || keyState['ư'] || keyState['arrowup']) inputAxes.y -= 1;
+    if (keyState['s'] || keyState['arrowdown']) inputAxes.y += 1;
+    if (keyState['a'] || keyState['â'] || keyState['arrowleft']) inputAxes.x -= 1;
+    if (keyState['d'] || keyState['đ'] || keyState['arrowright']) inputAxes.x += 1;
+}
+
+window.addEventListener('keydown', e => {
+    let k = e.key.toLowerCase();
+    keyState[k] = true;
+    if (e.key === ' ') isBoosting = true;
+    updateInputAxes();
+});
+
+window.addEventListener('keyup', e => {
+    let k = e.key.toLowerCase();
+    keyState[k] = false;
+    if (e.key === ' ') isBoosting = false;
+    updateInputAxes();
+});
+
+window.addEventListener('mousedown', e => {
+    // Không nhận đòn đánh nếu click trúng vùng Joystick điều khiển trên PC/Mobile
+    if (e.clientX > 200 || e.clientY < window.innerHeight - 200) {
+        player.attack();
+    }
+});
+
+// ====== HỆ THỐNG JOYSTICK ẢO DI ĐỘNG (TOUCH & MOUSE DRAG CHUỘT) ======
+function handleJoystickMove(e) {
+    if (!joystick.active) return;
+    let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    let dx = clientX - joystick.startX;
+    let dy = clientY - joystick.startY;
+    let dist = Math.hypot(dx, dy);
+    let maxRadius = 45; 
+
+    if (dist > 0) {
+        joystick.angle = Math.atan2(dy, dx);
+        joystick.force = dist / maxRadius;
+    }
+
+    let stickX = Math.cos(joystick.angle) * Math.min(dist, maxRadius) + 37.5;
+    let stickY = Math.sin(joystick.angle) * Math.min(dist, maxRadius) + 37.5;
+    
+    stick.style.left = `${stickX}px`;
+    stick.style.top = `${stickY}px`;
+}
+
+function startJoystick(clientX, clientY) {
+    joystick.active = true;
+    let bounds = zone.getBoundingClientRect();
+    joystick.startX = bounds.left + 65;
+    joystick.startY = bounds.top + 65;
+}
+
+function stopJoystick() {
+    joystick.active = false;
+    joystick.force = 0;
+    stick.style.left = '37.5px';
+    stick.style.top = '37.5px';
+}
+
+// Cảm ứng Mobile
+zone.addEventListener('touchstart', e => { startJoystick(e.touches[0].clientX, e.touches[0].clientY); handleJoystickMove(e); });
+window.addEventListener('touchmove', handleJoystickMove);
+window.addEventListener('touchend', stopJoystick);
+
+// Cho phép kéo chuột trên PC như joystick ảo
+zone.addEventListener('mousedown', e => { startJoystick(e.clientX, e.clientY); });
+window.addEventListener('mousemove', handleJoystickMove);
+window.addEventListener('mouseup', stopJoystick);
+
+// Sự kiện cho 2 nút bổ trợ trên điện thoại
+const btnBoost = document.getElementById('btn-boost');
+const btnAttack = document.getElementById('btn-attack');
+
+btnBoost.addEventListener('touchstart', e => { e.preventDefault(); isBoosting = true; });
+btnBoost.addEventListener('touchend', () => { isBoosting = false; });
+btnAttack.addEventListener('touchstart', e => { e.preventDefault(); player.attack(); });
+
+// Khởi động vòng lặp game
+init();
+loop();
+</script>
+</body>
+</html>
