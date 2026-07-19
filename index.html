@@ -175,6 +175,24 @@
             background: rgba(255, 211, 105, 0.6);
             border: 2px solid rgba(255, 211, 105, 0.9);
         }
+        /* Nút Tạm Dừng */
+        #btn-pause {
+            position: absolute;
+            top: 15px;
+            right: 210px;
+            width: 45px;
+            height: 45px;
+            font-size: 20px;
+            background: rgba(69, 243, 255, 0.2);
+            border: 2px solid #45f3ff;
+            border-radius: 8px;
+            color: #45f3ff;
+            cursor: pointer;
+            z-index: 15;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
 
         /* ================= GIAO DIỆN HỆ THỐNG MENU ================= */
         #game-ui {
@@ -233,6 +251,7 @@
     
     <div id="minimap"><canvas id="minimapCanvas"></canvas></div>
     <div id="leaderboard"><h3>TOP CAO THỦ</h3><ol id="leaderList"></ol></div>
+    <button id="btn-pause" onclick="togglePause()">⏸️</button>
     <div id="ui-bar">
         <div id="playerStats">Cấp độ: 1 | Danh hiệu: Đang tải...</div>
         <div id="levelBar"><div id="levelProgress"></div></div>
@@ -280,12 +299,22 @@
                 <span>Giữ nguyên 1/2 LV khi chết (50đ)</span>
                 <button class="btn" id="btn-buy-keep" onclick="buyItem('keepLevel', 50)">Mua</button>
             </div>
+            <!-- Các nút nâng cấp cấp độ chết ẩn/hiện tùy thuộc vào tiến trình mua -->
+            <div class="shop-item" id="item-minus3" style="display: none;">
+                <span>Chết -3 LV (dưới 3 về 1) (100đ)</span>
+                <button class="btn" id="btn-buy-minus3" onclick="buyItem('minus3Level', 100)">Mua</button>
+            </div>
+            <div class="shop-item" id="item-minus1" style="display: none;">
+                <span>Chết chỉ tụt 1 LV (200đ)</span>
+                <button class="btn" id="btn-buy-minus1" onclick="buyItem('minus1Level', 200)">Mua</button>
+            </div>
+
             <div class="shop-item">
                 <span>Vừa đi vừa đánh ko khựng (25đ)</span>
                 <button class="btn" id="btn-buy-move" onclick="buyItem('moveAttack', 25)">Mua</button>
             </div>
             <div class="shop-item">
-                <span>Tăng tốc độ (Vĩnh viễn) (20đ)</span>
+                <span>3x tốc độ (Vĩnh viễn) (20đ)</span>
                 <button class="btn" id="btn-buy-speed" onclick="buyItem('permSpeed', 20)">Mua</button>
             </div>
 
@@ -312,6 +341,7 @@
 let localUsers = JSON.parse(localStorage.getItem('evowars_accounts')) || {};
 let currentUser = null;
 let isPlayingGame = false;
+let isPaused = false;
 
 function saveUser() {
     if (currentUser) {
@@ -332,6 +362,24 @@ function switchPanel(panelId) {
         document.getElementById('btn-buy-keep').innerText = currentUser.items.keepLevel ? "Đã Mua" : "Mua";
         document.getElementById('btn-buy-move').innerText = currentUser.items.moveAttack ? "Đã Mua" : "Mua";
         document.getElementById('btn-buy-speed').innerText = currentUser.items.permSpeed ? "Đã Mua" : "Mua";
+        
+        // Cấu trúc hiển thị nút nâng cấp khi chết theo tiến trình
+        const divMinus3 = document.getElementById('item-minus3');
+        const divMinus1 = document.getElementById('item-minus1');
+        
+        if (currentUser.items.keepLevel) {
+            divMinus3.style.display = 'flex';
+            document.getElementById('btn-buy-minus3').innerText = currentUser.items.minus3Level ? "Đã Mua" : "Mua";
+        } else {
+            divMinus3.style.display = 'none';
+        }
+
+        if (currentUser.items.minus3Level) {
+            divMinus1.style.display = 'flex';
+            document.getElementById('btn-buy-minus1').innerText = currentUser.items.minus1Level ? "Đã Mua" : "Mua";
+        } else {
+            divMinus1.style.display = 'none';
+        }
     }
 }
 
@@ -346,7 +394,7 @@ function register() {
         password: p,
         points: 0,
         savedLevel: 1,
-        items: { keepLevel: false, moveAttack: false, permSpeed: false }
+        items: { keepLevel: false, minus3Level: false, minus1Level: false, moveAttack: false, permSpeed: false }
     };
     localStorage.setItem('evowars_accounts', JSON.stringify(localUsers));
     alert("Đăng ký thành công! Vui lòng đăng nhập.");
@@ -357,6 +405,9 @@ function login() {
     let p = document.getElementById('auth-pass').value;
     if (localUsers[u] && localUsers[u].password === p) {
         currentUser = localUsers[u];
+        // Đồng bộ các thuộc tính nâng cấp mới cho tài khoản cũ nếu chưa có
+        if (currentUser.items.minus3Level === undefined) currentUser.items.minus3Level = false;
+        if (currentUser.items.minus1Level === undefined) currentUser.items.minus1Level = false;
         switchPanel('panel-menu');
     } else {
         alert("Sai tài khoản hoặc mật khẩu!");
@@ -411,20 +462,50 @@ async function redeemPoints() {
 
 function startGame() {
     document.getElementById('game-ui').style.display = 'none';
+    document.getElementById('btn-pause').style.display = 'flex';
     isPlayingGame = true;
+    isPaused = false;
+    document.getElementById('btn-pause').innerText = "⏸️";
     // Khởi tạo game với cấp độ lưu trữ (nếu có giữ cấp)
     init(currentUser.savedLevel || 1); 
 }
 
+function togglePause() {
+    if (!isPlayingGame) return;
+    isPaused = !isPaused;
+    if (isPaused) {
+        document.getElementById('btn-pause').innerText = "▶️";
+    } else {
+        document.getElementById('btn-pause').innerText = "⏸️";
+    }
+}
+
 function gameOverHandler() {
     isPlayingGame = false;
+    isPaused = false;
     document.getElementById('game-ui').style.display = 'flex';
+    document.getElementById('btn-pause').style.display = 'none';
     switchPanel('panel-menu');
     
-    // Xử lý giữ 1/2 cấp độ nếu có vật phẩm
-    if (currentUser.items.keepLevel && player.level > 1) {
-        currentUser.savedLevel = Math.max(1, Math.floor(player.level / 2));
-        alert(`Trận đấu kết thúc! Sát thủ đã tiễn bạn lên bảng số!\nNhờ vật phẩm, bạn được giữ lại cấp độ ${currentUser.savedLevel} cho lần chơi sau!`);
+    // Xử lý giữ cấp độ theo các mốc nâng cấp mới
+    if (player.level > 1) {
+        if (currentUser.items.minus1Level) {
+            currentUser.savedLevel = Math.max(1, player.level - 1);
+            alert(`Trận đấu kết thúc!\nNhờ nâng cấp Tối Cao (tụt 1 LV), bạn được giữ lại cấp độ ${currentUser.savedLevel} cho lần chơi sau!`);
+        } else if (currentUser.items.minus3Level) {
+            if (player.level < 3) {
+                currentUser.savedLevel = 1;
+            } else {
+                currentUser.savedLevel = player.level - 3;
+            }
+            alert(`Trận đấu kết thúc!\nNhờ nâng cấp Bậc 1 (chết -3 LV), bạn được giữ lại cấp độ ${currentUser.savedLevel} cho lần chơi sau!`);
+        } else if (currentUser.items.keepLevel) {
+            currentUser.savedLevel = Math.max(1, Math.floor(player.level / 2));
+            alert(`Trận đấu kết thúc!\nNhờ vật phẩm giữ 1/2 LV, bạn được giữ lại cấp độ ${currentUser.savedLevel} cho lần chơi sau!`);
+        } else {
+            currentUser.savedLevel = 1;
+            alert(`Trận đấu kết thúc! Bạn đã chết và sẽ chơi lại từ cấp 1.`);
+        }
     } else {
         currentUser.savedLevel = 1;
         alert(`Trận đấu kết thúc! Bạn đã chết và sẽ chơi lại từ cấp 1.`);
@@ -440,7 +521,7 @@ const mCtx = minimapCanvas.getContext('2d');
 
 const MAP_SIZE = 3500; 
 const BOT_COUNT = 60; 
-const FOOD_COUNT = 750;
+const FOOD_COUNT = 1200;
 
 const EVOLUTIONS = [
     { level: 1, name: "Sơ Sinh", emoji: "😀", weapon: "🏏", size: 21, range: 45 },
@@ -538,7 +619,7 @@ class Character {
     }
 
     attack() {
-        if (!this.isAttacking) {
+        if (!this.isAttacking && !isPaused) {
             this.isAttacking = true;
             this.attackProgress = 0;
         }
@@ -547,9 +628,9 @@ class Character {
     update() {
         let speed = this.baseSpeed;
         
-        // CỘNG THÊM TỐC ĐỘ VĨNH VIỄN TỪ SHOP (20 POINTS)
+        // CỘNG THÊM TỐC ĐỘ VĨNH VIỄN TỪ SHOP - ĐÃ ĐỔI THÀNH 3X TỐC ĐỘ
         if (!this.isBot && currentUser && currentUser.items.permSpeed) {
-            speed *= 1.3; 
+            speed *= 3.0; 
         }
 
         if (this.isBoosting && this.exp > 5) {
@@ -557,10 +638,7 @@ class Character {
             if (Math.random() < 0.15) this.exp -= 1;
         }
 
-        // CƠ CHẾ KHỰNG LẠI KHI ĐÁNH NẾU KHÔNG CÓ VẬT PHẨM (25 POINTS)
-        if (!this.isBot && this.isAttacking && (!currentUser || !currentUser.items.moveAttack)) {
-            speed = 0; 
-        }
+        // ĐÃ SỬA LỖI ĐANG ĐI MÀ ĐÁNH BỊ ĐỨNG IM (XÓA speed = 0, VẬN TỐC GIỮ NGUYÊN)
 
         if (!this.isBot) {
             if (joystick.active && joystick.force > 0) {
@@ -701,7 +779,7 @@ function spawnBot() {
 }
 
 function checkCollisions() {
-    if(!isPlayingGame) return;
+    if(!isPlayingGame || isPaused) return;
 
     let activeFighters = [player, ...entities];
 
@@ -811,19 +889,23 @@ function loop() {
     });
 
     entities.forEach(bot => {
-        if(isPlayingGame) bot.update(); // Chỉ bot di chuyển nếu đang chơi
+        if(isPlayingGame && !isPaused) bot.update(); // Chỉ bot di chuyển nếu đang chơi và không bị pause
         bot.draw();
     });
 
     if(player && isPlayingGame) {
-        player.isBoosting = isBoosting;
-        player.update();
+        if (!isPaused) {
+            player.isBoosting = isBoosting;
+            player.update();
+        }
         player.draw();
     }
 
     ctx.restore();
 
-    checkCollisions();
+    if (!isPaused) {
+        checkCollisions();
+    }
     drawMinimap();
     updateUI();
 
@@ -843,7 +925,7 @@ function updateInputAxes() {
 }
 
 window.addEventListener('keydown', e => {
-    if(!isPlayingGame) return;
+    if(!isPlayingGame || isPaused) return;
     let k = e.key.toLowerCase();
     keyState[k] = true;
     if (e.key === ' ') isBoosting = true;
@@ -859,15 +941,14 @@ window.addEventListener('keyup', e => {
 });
 
 window.addEventListener('mousedown', e => {
-    if(!isPlayingGame) return;
+    if(!isPlayingGame || isPaused) return;
     if (e.clientX > 200 || e.clientY < window.innerHeight - 200) {
         player.attack();
     }
 });
-
-// Joystick
+    // Joystick
 function handleJoystickMove(e) {
-    if (!joystick.active || !isPlayingGame) return;
+    if (!joystick.active || !isPlayingGame || isPaused) return;
     let clientX = e.touches ? e.touches[0].clientX : e.clientX;
     let clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
@@ -889,7 +970,7 @@ function handleJoystickMove(e) {
 }
 
 function startJoystick(clientX, clientY) {
-    if(!isPlayingGame) return;
+    if(!isPlayingGame || isPaused) return;
     joystick.active = true;
     let bounds = zone.getBoundingClientRect();
     joystick.startX = bounds.left + 65;
@@ -913,9 +994,9 @@ window.addEventListener('mouseup', stopJoystick);
 const btnBoost = document.getElementById('btn-boost');
 const btnAttack = document.getElementById('btn-attack');
 
-btnBoost.addEventListener('touchstart', e => { e.preventDefault(); if(isPlayingGame) isBoosting = true; });
+btnBoost.addEventListener('touchstart', e => { e.preventDefault(); if(isPlayingGame && !isPaused) isBoosting = true; });
 btnBoost.addEventListener('touchend', () => { isBoosting = false; });
-btnAttack.addEventListener('touchstart', e => { e.preventDefault(); if(isPlayingGame) player.attack(); });
+btnAttack.addEventListener('touchstart', e => { e.preventDefault(); if(isPlayingGame && !isPaused) player.attack(); });
 
 // Khởi chạy ngầm nền móng Game
 init();
