@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mingfruit Daily Key Generator</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #090d16;
+            color: #f1f5f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Hiệu ứng nền ánh sáng Neon mờ ảo chuyển động */
+        body::before, body::after {
+            content: '';
+            position: absolute;
+            width: 350px;
+            height: 350px;
+            border-radius: 50%;
+            filter: blur(80px);
+            z-index: -1;
+            opacity: 0.4;
+            animation: floatGlow 8s infinite alternate ease-in-out;
+        }
+        body::before {
+            background: #8b5cf6; /* Tím Neon */
+            top: 10%;
+            left: 15%;
+        }
+        body::after {
+            background: #06b6d4; /* Xanh Neon */
+            bottom: 10%;
+            right: 15%;
+            animation-delay: -4s;
+        }
+
+        @keyframes floatGlow {
+            0% { transform: translateY(0) scale(1); }
+            100% { transform: translateY(-30px) scale(1.1); }
+        }
+
+        .card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 35px 30px;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6), 
+                        0 0 20px rgba(139, 92, 246, 0.15);
+            text-align: center;
+            width: 340px;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            position: relative;
+        }
+
+        h2 {
+            margin-bottom: 25px;
+            font-size: 1.4rem;
+            color: #c084fc;
+            text-shadow: 0 0 10px rgba(192, 132, 252, 0.4);
+            letter-spacing: 0.5px;
+        }
+
+        .key-box {
+            background: rgba(3, 7, 18, 0.6);
+            border: 2px dashed rgba(6, 182, 212, 0.5);
+            padding: 18px;
+            font-size: 1.5rem;
+            font-family: 'Courier New', Courier, monospace;
+            letter-spacing: 3px;
+            margin-bottom: 22px;
+            border-radius: 12px;
+            color: #38bdf8;
+            word-break: break-all;
+            box-shadow: inset 0 0 10px rgba(6, 182, 212, 0.1);
+            text-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+        }
+
+        button {
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            color: white;
+            border: none;
+            padding: 14px 20px;
+            font-size: 1rem;
+            border-radius: 12px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: linear-gradient(135deg, #7c3aed, #2563eb);
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.6);
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        .status {
+            margin-top: 18px;
+            font-size: 0.85rem;
+            color: #94a3b8;
+            transition: color 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>⚡ Key Hôm Nay ⚡</h2>
+    <div class="key-box" id="keyValue">Đang tải...</div>
+    <button onclick="copyKey()">Sao Chép Key</button>
+    <div class="status" id="statusMsg"></div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+    import { getDatabase, ref, get, set } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAkgK_3ts28ucAFf1KkVCSLkiopP47FKfY",
+        authDomain: "mingfruit.firebaseapp.com",
+        databaseURL: "https://mingfruit-default-rtdb.firebaseio.com",
+        projectId: "mingfruit",
+        storageBucket: "mingfruit.firebasestorage.app",
+        messagingSenderId: "537977784405",
+        appId: "1:537977784405:web:fd4264a93fa974e0f02cdc",
+        measurementId: "G-TK99K5J2YW"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Get date string in Vietnam timezone (UTC+7)
+    function getVietnamDateStr() {
+        const now = new Date();
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const vnDate = new Date(utc + (3600000 * 7));
+        const year = vnDate.getFullYear();
+        const month = String(vnDate.getMonth() + 1).padStart(2, '0');
+        const day = String(vnDate.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function generateRandomKey() {
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        let result = "";
+        for (let i = 0; i < 10; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+    }
+
+    async function initKey() {
+        const dateStr = getVietnamDateStr();
+        const keyRef = ref(db, 'daily_keys/' + dateStr);
+
+        try {
+            const snapshot = await get(keyRef);
+            let currentKey = "";
+            if (snapshot.exists()) {
+                currentKey = snapshot.val();
+            } else {
+                currentKey = generateRandomKey();
+                await set(keyRef, currentKey);
+            }
+            document.getElementById("keyValue").innerText = currentKey;
+        } catch (error) {
+            console.error(error);
+            const fallbackKey = generateRandomKey();
+            document.getElementById("keyValue").innerText = fallbackKey;
+            document.getElementById("statusMsg").innerText = "Lỗi kết nối Firebase, dùng key tạm.";
+        }
+    }
+
+    window.copyKey = function() {
+        const keyText = document.getElementById("keyValue").innerText;
+        if (keyText && keyText !== "Đang tải...") {
+            navigator.clipboard.writeText(keyText).then(() => {
+                const msg = document.getElementById("statusMsg");
+                msg.innerText = "Đã sao chép key thành công!";
+                msg.style.color = "#38bdf8";
+                setTimeout(() => {
+                    msg.style.color = "#94a3b8";
+                }, 2000);
+            });
+        }
+    }
+
+    initKey();
+</script>
+
+</body>
+  </html>
+  
